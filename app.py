@@ -17,12 +17,11 @@ app = Flask(__name__)
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "").strip()
 
 # Telegram chat id (Render -> Environment -> CHAT_ID)
-# int'e çevirmeye çalış, hata olursa string olarak bırak.
 _raw_chat_id = os.environ.get("CHAT_ID", "").strip()
 try:
     CHAT_ID = int(_raw_chat_id)
 except ValueError:
-    CHAT_ID = _raw_chat_id  # string kalır, Telegram yine kabul ediyor
+    CHAT_ID = _raw_chat_id  # string kalırsa da Telegram kabul ediyor
 
 # İzlenecek domain (Render -> Environment -> DOMAIN_URL)
 DOMAIN_URL = os.environ.get(
@@ -44,7 +43,6 @@ MY_SERVICE_URL = "https://betorspin-monitor-cloud.onrender.com/"
 
 # Domain son durumunu hafızada tut (UP/DOWN)
 last_status = {DOMAIN_URL: None}
-
 
 # =======================================
 #  Telegram Yardımcı Fonksiyonu
@@ -122,31 +120,45 @@ def monitor_loop():
         up = check_domain(DOMAIN_URL)
         before = last_status[DOMAIN_URL]
 
-        # İlk kontrol
+        # -----------------------------
+        # İlk kontrol → HER ZAMAN Telegram bildirimi
+        # -----------------------------
         if before is None:
             last_status[DOMAIN_URL] = up
-            if not up:
+
+            if up:
                 send_telegram_message(
-                    f"⚠️ {DOMAIN_URL} şu anda ULAŞILAMIYOR! (ilk kontrol)"
+                    f"✅ İlk kontrol: {DOMAIN_URL} şu anda ÇALIŞIYOR (UP)."
                 )
+            else:
+                send_telegram_message(
+                    f"⚠️ İlk kontrol: {DOMAIN_URL} şu anda ULAŞILAMIYOR (DOWN)!"
+                )
+
             print(
                 f"{DOMAIN_URL} ilk kontrol → {'UP' if up else 'DOWN'}",
                 flush=True
             )
 
-        # Durum değişti (UP -> DOWN veya DOWN -> UP)
+        # -----------------------------
+        # Durum değişti (UP → DOWN veya DOWN → UP)
+        # -----------------------------
         elif up != before:
             last_status[DOMAIN_URL] = up
+
             if not up:
                 send_telegram_message(f"⚠️ {DOMAIN_URL} ULAŞILAMIYOR!")
             else:
                 send_telegram_message(f"✅ {DOMAIN_URL} tekrar çalışıyor!")
+
             print(
                 f"{DOMAIN_URL} DURUM DEĞİŞTİ → {'UP' if up else 'DOWN'}",
                 flush=True
             )
 
-        # Durum aynı (sadece log'a yaz)
+        # -----------------------------
+        # Durum aynı (sadece log’a yaz)
+        # -----------------------------
         else:
             print(
                 f"{DOMAIN_URL} → {'UP' if up else 'DOWN'}",
@@ -189,38 +201,42 @@ def ping():
     return "pong", 200
 
 
-@app.route("/test-notify")
-def test_notify():
-    """
-    Elle test için:
-    https://...onrender.com/test-notify açınca Telegram'a test mesajı gönderir.
-    """
-    send_telegram_message("🧪 TEST: Betorspin monitor’dan deneme bildirimi.")
-    return "Test bildirimi gönderildi.", 200
+@app.route("/test")
+def test():
+    """Telegram'a manuel test mesajı gönder."""
+    send_telegram_message("🧪 TEST: Betorspin monitor'dan deneme bildirimi.")
+    return "Test mesajı gönderildi.", 200
+
+
+# =======================================
+#  Başlangıç Bildirimi
+# =======================================
+def notify_startup():
+    msg = (
+        "🚀 Betorspin monitor YENİDEN BAŞLATILDI.\n\n"
+        f"🌐 DOMAIN: {DOMAIN_URL}\n"
+        f"⏱️ KONTROL ARALIĞI: {CHECK_INTERVAL_SECONDS} saniye\n"
+        f"🔍 EXPECTED_KEYWORD: {EXPECTED_KEYWORD}"
+    )
+    send_telegram_message(msg)
 
 
 # =======================================
 #  Uygulama Başlangıcı
 # =======================================
 def start_background_threads():
-    """Monitor ve Keep-Alive thread'lerini başlat + deploy bildirimi gönder."""
-    # Thread'leri başlat
+    """Monitor ve Keep-Alive thread'lerini başlat."""
     t_monitor = threading.Thread(target=monitor_loop, daemon=True)
     t_monitor.start()
 
     t_alive = threading.Thread(target=keep_alive, daemon=True)
     t_alive.start()
 
-    # Deploy / restart bildirimi
-    send_telegram_message(
-        f"🚀 Betorspin monitor YENİDEN BAŞLATILDI.\n\n"
-        f"🌐 DOMAIN: {DOMAIN_URL}\n"
-        f"⏱ KONTROL ARALIĞI: {CHECK_INTERVAL_SECONDS} saniye\n"
-        f"🔍 EXPECTED_KEYWORD: {EXPECTED_KEYWORD}"
-    )
 
+# Önce Telegram'a "yeniden başlatıldı" mesajı at
+notify_startup()
 
-# Uygulama ayağa kalkınca thread'leri başlat
+# Sonra arka plan thread'lerini başlat
 start_background_threads()
 
 
