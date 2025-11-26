@@ -4,11 +4,11 @@ import time
 import requests
 from flask import Flask
 
-# Flask web uygulaması (Render bunu web service olarak çalıştıracak)
+# Flask web uygulaması
 app = Flask(__name__)
 
 # === AYARLAR ===
-BOT_TOKEN = os.environ["BOT_TOKEN"]              # Render'da env olarak vereceğiz
+BOT_TOKEN = os.environ["BOT_TOKEN"]              # Render env
 CHAT_ID = int(os.environ["CHAT_ID"])             # Render env
 DOMAIN_URL = os.environ.get("DOMAIN_URL", "https://betorspin101.com/pt-br/")
 CHECK_INTERVAL_SECONDS = int(os.environ.get("CHECK_INTERVAL_SECONDS", "60"))
@@ -19,14 +19,27 @@ MIN_HTML_LENGTH = int(os.environ.get("MIN_HTML_LENGTH", "5000"))
 # Domain durumu (UP/DOWN) hafızada tutulacak
 last_status = {DOMAIN_URL: None}
 
+
 def send_telegram_message(text: str):
-    """Telegram botuna mesaj gönder."""
+    """Telegram botuna mesaj gönder ve hata varsa logla."""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
+    payload = {
+        "chat_id": CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+    }
     try:
-        requests.post(url, data=payload, timeout=10)
+        r = requests.post(url, data=payload, timeout=10)
+
+        # Telegram cevap kodu 200 değilse logla
+        if r.status_code != 200:
+            print(f"Telegram HATASI {r.status_code}: {r.text}", flush=True)
+        else:
+            print("Telegram mesajı gönderildi ✅", flush=True)
+
     except Exception as e:
         print(f"Telegram mesajı gönderilemedi: {e}", flush=True)
+
 
 def check_domain(domain: str) -> bool:
     """Site gerçekten çalışıyor mu? 503 dahil her türlü sıkıntıyı DOWN say."""
@@ -52,6 +65,7 @@ def check_domain(domain: str) -> bool:
 
     return True
 
+
 def monitor_loop():
     """Arka planda domaini sürekli kontrol eden döngü."""
     global last_status
@@ -61,16 +75,14 @@ def monitor_loop():
         up = check_domain(DOMAIN_URL)
         before = last_status[DOMAIN_URL]
 
-       if before is None:
-    # İlk kontrol → UP ya da DOWN neyse Telegram'a haber ver
-    last_status[DOMAIN_URL] = up
-
-    if up:
-        send_telegram_message(f"✅ {DOMAIN_URL} çalışıyor (ilk kontrol)")
-    else:
-        send_telegram_message(f"⚠️ {DOMAIN_URL} şu anda ULAŞILAMIYOR! (ilk kontrol)")
-
-    print(f"{DOMAIN_URL} ilk kontrol → {'UP' if up else 'DOWN'}", flush=True)
+        if before is None:
+            # İlk kontrol
+            last_status[DOMAIN_URL] = up
+            if not up:
+                send_telegram_message(
+                    f"⚠️ {DOMAIN_URL} şu anda ULAŞILAMIYOR! (ilk kontrol)"
+                )
+            print(f"{DOMAIN_URL} ilk kontrol → {'UP' if up else 'DOWN'}", flush=True)
 
         elif up != before:
             # Durum değişti
@@ -79,22 +91,28 @@ def monitor_loop():
                 send_telegram_message(f"⚠️ {DOMAIN_URL} ULAŞILAMIYOR!")
             else:
                 send_telegram_message(f"✅ {DOMAIN_URL} tekrar çalışıyor!")
-            print(f"{DOMAIN_URL} DURUM DEĞİŞTİ → {'UP' if up else 'DOWN'}", flush=True)
+            print(
+                f"{DOMAIN_URL} DURUM DEĞİŞTİ → {'UP' if up else 'DOWN'}",
+                flush=True,
+            )
         else:
             # Durum aynı
             print(f"{DOMAIN_URL} → {'UP' if up else 'DOWN'}", flush=True)
 
         time.sleep(CHECK_INTERVAL_SECONDS)
 
+
 # Flask route – Render bunu HTTP için kullanacak
 @app.route("/")
 def index():
     return "Betorspin monitor up and running ✅", 200
 
+
 # Uygulama ayağa kalkınca monitor thread'ini başlat
 def start_monitor_thread():
     t = threading.Thread(target=monitor_loop, daemon=True)
     t.start()
+
 
 start_monitor_thread()
 
