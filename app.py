@@ -189,16 +189,35 @@ def ping():
     return "pong", 200
 
 
+@app.route("/test-notify")
+def test_notify():
+    """
+    Elle test için:
+    https://...onrender.com/test-notify açınca Telegram'a test mesajı gönderir.
+    """
+    send_telegram_message("🧪 TEST: Betorspin monitor’dan deneme bildirimi.")
+    return "Test bildirimi gönderildi.", 200
+
+
 # =======================================
 #  Uygulama Başlangıcı
 # =======================================
 def start_background_threads():
-    """Monitor ve Keep-Alive thread'lerini başlat."""
+    """Monitor ve Keep-Alive thread'lerini başlat + deploy bildirimi gönder."""
+    # Thread'leri başlat
     t_monitor = threading.Thread(target=monitor_loop, daemon=True)
     t_monitor.start()
 
     t_alive = threading.Thread(target=keep_alive, daemon=True)
     t_alive.start()
+
+    # Deploy / restart bildirimi
+    send_telegram_message(
+        f"🚀 Betorspin monitor YENİDEN BAŞLATILDI.\n\n"
+        f"🌐 DOMAIN: {DOMAIN_URL}\n"
+        f"⏱ KONTROL ARALIĞI: {CHECK_INTERVAL_SECONDS} saniye\n"
+        f"🔍 EXPECTED_KEYWORD: {EXPECTED_KEYWORD}"
+    )
 
 
 # Uygulama ayağa kalkınca thread'leri başlat
