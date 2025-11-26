@@ -61,12 +61,16 @@ def monitor_loop():
         up = check_domain(DOMAIN_URL)
         before = last_status[DOMAIN_URL]
 
-        if before is None:
-            # İlk kontrol
-            last_status[DOMAIN_URL] = up
-            if not up:
-                send_telegram_message(f"⚠️ {DOMAIN_URL} şu anda ULAŞILAMIYOR! (ilk kontrol)")
-            print(f"{DOMAIN_URL} ilk kontrol → {'UP' if up else 'DOWN'}", flush=True)
+       if before is None:
+    # İlk kontrol → UP ya da DOWN neyse Telegram'a haber ver
+    last_status[DOMAIN_URL] = up
+
+    if up:
+        send_telegram_message(f"✅ {DOMAIN_URL} çalışıyor (ilk kontrol)")
+    else:
+        send_telegram_message(f"⚠️ {DOMAIN_URL} şu anda ULAŞILAMIYOR! (ilk kontrol)")
+
+    print(f"{DOMAIN_URL} ilk kontrol → {'UP' if up else 'DOWN'}", flush=True)
 
         elif up != before:
             # Durum değişti
